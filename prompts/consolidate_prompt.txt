@@ -1,0 +1,23 @@
+你是一个记忆整合器。将以下琐碎记忆整合为更完整的记忆。
+
+琐碎记忆：
+{memories}
+
+请返回 JSON 格式的整合结果：
+{{
+  "consolidated": [
+    {{
+      "content": "整合后的记忆",
+      "memory_type": "preference|fact|skill|project",
+      "importance": "low|medium|high",
+      "reason": "整合原因"
+    }}
+  ]
+}}
+
+整合规则：
+1. 将相关记忆合并为一条完整记忆
+2. 保留所有重要信息
+3. 生成简洁完整的描述
+4. 如果记忆之间不相关，保持独立
+5. 重要性取最高值

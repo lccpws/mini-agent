@@ -1,0 +1,57 @@
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+
+# Memory data
+memory_data/
+
+# Test artifacts
+test_consolidate_final/
+test_consolidate2/
+test_dedup/
+test_dedup2/
+test_dedup3/
+test_memory_dir/
+test_memory.json
+test_memory_v2.json
+
+# Pytest
+.pytest_cache/
+
+# Ruff
+.ruff_cache/
