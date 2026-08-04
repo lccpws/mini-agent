@@ -8,11 +8,11 @@ __version__ = "0.1.0"
 from .agent import ReactAgent
 from .runner import ReActController
 from .llm import LLM
-from .planner import Planner
+from .planner import LLMPlanner
 
 __all__ = [
     "ReactAgent",
     "ReActController",
     "LLM",
-    "Planner",
+    "LLMPlanner",
 ]

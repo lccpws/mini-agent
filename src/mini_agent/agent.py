@@ -14,7 +14,7 @@ from mini_agent.knowledge import KnowledgeBase, KnowledgeRetriever
 from mini_agent.memory.extractor import MemoryExtractor
 from mini_agent.memory.manager import MemoryManager
 from mini_agent.memory.models import MemoryType
-from mini_agent.planner import Planner
+from mini_agent.planner import LLMPlanner, Plan, PlanStep, PlanStatus, StepStatus, get_ready_steps
 from mini_agent.runner import ReActController
 from mini_agent.state import AgentState
 from mini_agent.trace_step import TraceLogger, TraceStep
@@ -23,7 +23,7 @@ from mini_agent.trace_step import TraceLogger, TraceStep
 class ReactAgent:
     """ReAct Agent，支持纯 ReAct 和 Plan + ReAct 两种模式"""
 
-    def __init__(self, controller: ReActController, planner: Planner = None, max_steps: int = 5, debug_context: bool = False, knowledge_base: KnowledgeBase = None, policy: ContextPolicy = None):
+    def __init__(self, controller: ReActController, planner: LLMPlanner = None, max_steps: int = 5, debug_context: bool = False, knowledge_base: KnowledgeBase = None, policy: ContextPolicy = None):
         self.controller = controller
         self.planner = planner
         self.max_steps = max_steps
@@ -217,71 +217,129 @@ class ReactAgent:
             output_tokens=2000
         )
 
-        print("=" * 50)
-        print("Phase 1: Planning")
-        print("=" * 50)
+        goal = state.question
+        context = "\n".join([item.content for item in state.context_items])
 
-        plan_result = self.planner.plan(state)
-        plan = plan_result.get("plan", [])
-        reasoning = plan_result.get("reasoning", "")
+        max_replan_attempts = 3
+        replan_count = 0
 
-        print(f"计划推理: {reasoning}")
-        print(f"执行计划: {json.dumps(plan, ensure_ascii=False, indent=2)}")
+        while replan_count <= max_replan_attempts:
+            print("=" * 50)
+            print(f"Phase 1: Planning (尝试 {replan_count + 1})")
+            print("=" * 50)
 
-        print("\n" + "=" * 50)
-        print("Phase 2: Execution")
-        print("=" * 50)
+            plan = self.planner.create_plan(goal, context)
+            plan.status = PlanStatus.RUNNING
 
-        observations = []
+            print(f"目标: {plan.goal}")
+            print(f"步骤数: {len(plan.steps)}")
+            for step in plan.steps:
+                deps = ", ".join(step.dependencies) if step.dependencies else "无"
+                print(f"  - [{step.id}] {step.task} (依赖: {deps}, 能力: {step.capability})")
 
-        for i, step in enumerate(plan):
-            tool = step.get("tool", "")
-            args = step.get("args", {})
+            print("\n" + "=" * 50)
+            print("Phase 2: Execution")
+            print("=" * 50)
 
-            print(f"\nStep {i + 1}: {tool}")
+            step_counter = 0
+            execution_failed = False
 
-            trace_step = TraceStep(
-                question=state.question,
-                step=i + 1,
-                thought=f"执行计划步骤 {i + 1}: {tool}"
-            )
+            while True:
+                ready_steps = get_ready_steps(plan)
 
-            if tool == "answer":
-                if observations:
-                    summary = "\n".join([
-                        f"工具 {obs.get('tool', '')} 返回: {obs.get('result', '')}"
-                        for obs in observations
-                    ])
-                    state["observations"] = summary
-                decision = self.controller.step(state)
+                if not ready_steps:
+                    all_completed = all(s.status == StepStatus.COMPLETED for s in plan.steps)
+                    if all_completed:
+                        plan.status = PlanStatus.COMPLETED
+                        print("\n计划执行完成")
+                    else:
+                        plan.status = PlanStatus.FAILED
+                        print("\n没有可执行的步骤（可能存在循环依赖或步骤失败）")
+                    break
 
-                self.memory_manager.add(state.question, MemoryType.QUESTION, scope="short_term")
-                self.memory_manager.add(decision.get("content", "无法生成答案"), MemoryType.ANSWER, scope="short_term")
+                for step in ready_steps:
+                    step_counter += 1
+                    step.status = StepStatus.RUNNING
+                    print(f"\nStep {step_counter}: [{step.id}] {step.task}")
 
-                trace_step.answer = decision.get("content", "无法生成答案")
-                self.tracelog.log(trace_step)
+                    trace_step = TraceStep(
+                        question=state.question,
+                        step=step_counter,
+                        thought=f"执行计划步骤: {step.task}"
+                    )
+
+                    if step.capability == "answer":
+                        if step.dependencies:
+                            summary_parts = []
+                            for dep_id in step.dependencies:
+                                dep_step = next((s for s in plan.steps if s.id == dep_id), None)
+                                if dep_step and dep_step.result:
+                                    summary_parts.append(f"{dep_step.task}: {dep_step.result}")
+                            state["observations"] = "\n".join(summary_parts)
+
+                        decision = self.controller.step(state)
+                        answer = decision.get("content", "无法生成答案")
+
+                        self.memory_manager.add(state.question, MemoryType.QUESTION, scope="short_term")
+                        self.memory_manager.add(answer, MemoryType.ANSWER, scope="short_term")
+
+                        trace_step.answer = answer
+                        step.status = StepStatus.COMPLETED
+                        step.result = answer
+                        self.tracelog.log(trace_step)
+                        print(f"  答案: {answer}")
+                        plan.status = PlanStatus.COMPLETED
+                        self.tracelog.dump()
+                        return self._format_trace()
+
+                    decision = {
+                        "type": "tool",
+                        "tool": step.capability,
+                        "args": {}
+                    }
+
+                    trace_step.action = step.capability
+                    trace_step.args = decision["args"]
+
+                    try:
+                        observation = self.controller.execute_tool(decision, role)
+                        trace_step.observation = observation
+                        step.status = StepStatus.COMPLETED
+                        step.result = str(observation)
+
+                        tool_result = f"调用 {step.capability} 返回: {observation}"
+                        self.memory_manager.add(tool_result, MemoryType.TOOL_RESULT, scope="short_term")
+
+                        state["observations"] = str(observation)
+
+                        self.tracelog.log(trace_step)
+                        print(f"  结果: {observation}")
+                    except Exception as e:
+                        step.status = StepStatus.FAILED
+                        step.result = str(e)
+                        execution_failed = True
+                        print(f"  失败: {e}")
+                        self.tracelog.log(trace_step)
+                        break
+
+                if execution_failed:
+                    break
+
+            if plan.status == PlanStatus.COMPLETED:
                 break
 
-            decision = {
-                "type": "tool",
-                "tool": tool,
-                "args": args
-            }
-
-            trace_step.action = tool
-            trace_step.args = args
-
-            observation = self.controller.execute_tool(decision, role)
-            trace_step.observation = observation
-            observations.append(observation)
-
-            tool_result = f"调用 {tool} 返回: {observation}"
-            self.memory_manager.add(tool_result, MemoryType.TOOL_RESULT, scope="short_term")
-
-            state["observations"] = str(observation)
-
-            self.tracelog.log(trace_step)
-            print(f"  结果: {observation}")
+            if execution_failed:
+                replan_count += 1
+                if replan_count <= max_replan_attempts:
+                    print(f"\n计划执行失败，准备重新规划 (尝试 {replan_count}/{max_replan_attempts})")
+                    plan.status = PlanStatus.NEED_REPLAN
+                    failed_steps = [s for s in plan.steps if s.status == StepStatus.FAILED]
+                    context += f"\n\n上次执行失败的步骤: {', '.join([f'{s.id}: {s.result}' for s in failed_steps])}"
+                else:
+                    plan.status = PlanStatus.FAILED
+                    print(f"\n已达到最大重试次数 ({max_replan_attempts})，计划执行失败")
+            else:
+                break
 
         self.tracelog.dump()
         return self._format_trace()

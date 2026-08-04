@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import tiktoken
 from typing import ClassVar
 
 
@@ -32,7 +33,7 @@ class TiktokenCounter(TokenCounter):
     def _get_encoding(self):
         if self._encoding is None:
             try:
-                import tiktoken
+                
                 self._encoding = tiktoken.get_encoding(self.encoding_name)
             except (ImportError, ValueError, OSError):
                 self._encoding = False
