@@ -13,9 +13,12 @@ class PlanStatus:
 
 class TaskStatus:
     PENDING = "PENDING"
+    READY = "READY"
     RUNNING = "RUNNING"
-    COMPLETED = "COMPLETED"
+    SUCCESS = "SUCCESS"
     FAILED = "FAILED"
+    RETRYING = "RETRYING"
+    CANCELLED = "CANCELLED"
 
 
 class TaskSchemas:
@@ -118,6 +121,8 @@ class Task:
     status: str = TaskStatus.PENDING
     result: Any = None
     error: str | None = None
+    retry_count: int = 0
+    max_retry: int = 3
 
     def _resolve_schema(self) -> dict[str, Any] | None:
         if self.output_schema is None:

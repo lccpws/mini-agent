@@ -11,6 +11,7 @@ from mini_agent.context import (
     ContextSource,
 )
 from mini_agent.context.token_counter import TokenCounterFactory
+from mini_agent.executor import TaskEngine
 from mini_agent.knowledge import KnowledgeBase, KnowledgeRetriever
 from mini_agent.memory.extractor import MemoryExtractor
 from mini_agent.memory.manager import MemoryManager
@@ -264,6 +265,11 @@ class ReactAgent:
 
             task_counter = 0
             execution_failed = False
+            task_engine = TaskEngine(
+                controller=self.controller,
+                tracelog=self.tracelog,
+                memory_manager=self.memory_manager
+            )
 
             while True:
                 ready_tasks = task_graph.get_ready_tasks()
@@ -288,76 +294,35 @@ class ReactAgent:
                         thought=f"执行任务: {task.description}"
                     )
 
-                    if task.capability == "answer":
-                        if task.dependencies:
-                            summary_parts = []
-                            for dep_id in task.dependencies:
-                                dep_task = task_graph.get_task(dep_id)
-                                if dep_task and dep_task.result:
-                                    if dep_task.output_schema:
-                                        fields = dep_task.output_schema.get("properties", {})
-                                        for field_name in fields:
-                                            value = dep_task.get_result_field(field_name)
-                                            if value is not None:
-                                                summary_parts.append(f"{dep_task.description}.{field_name}: {value}")
-                                    else:
-                                        summary_parts.append(f"{dep_task.description}: {dep_task.result}")
-                            state["observations"] = "\n".join(summary_parts)
+                    success, result = task_engine.execute_task(task, state, role)
 
-                        decision = self.controller.step(state)
-                        answer = decision.get("content", "无法生成答案")
+                    if success:
+                        task.status = TaskStatus.SUCCESS
+                        task.result = result
 
-                        self.memory_manager.add(state.question, MemoryType.QUESTION, scope="short_term")
-                        self.memory_manager.add(answer, MemoryType.ANSWER, scope="short_term")
-
-                        trace_step.answer = answer
-                        task.status = TaskStatus.COMPLETED
-                        task.result = answer
-                        self.tracelog.log(trace_step)
-                        print(f"  答案: {answer}")
-                        plan.status = PlanStatus.COMPLETED
-                        self.tracelog.dump()
-                        return self._format_trace()
-
-                    decision = {
-                        "type": "tool",
-                        "tool": task.capability,
-                        "args": task.input
-                    }
-
-                    trace_step.action = task.capability
-                    trace_step.args = decision["args"]
-
-                    try:
-                        observation = self.controller.execute_tool(decision, role)
-                        trace_step.observation = observation
-
-                        observation_dict = self._convert_to_dict(observation, task)
-                        task.result = observation_dict
-
-                        is_valid, validation_error = task.validate_result(observation_dict)
-                        if not is_valid:
-                            task.status = TaskStatus.FAILED
-                            task.error = validation_error
-                            execution_failed = True
-                            print(f"  结果验证失败: {validation_error}")
+                        if task.capability == "answer":
+                            self.memory_manager.add(state.question, MemoryType.QUESTION, scope="short_term")
+                            self.memory_manager.add(result, MemoryType.ANSWER, scope="short_term")
+                            trace_step.answer = result
                             self.tracelog.log(trace_step)
-                            break
-
-                        task.status = TaskStatus.COMPLETED
-
-                        tool_result = f"调用 {task.capability} 返回: {observation_dict}"
-                        self.memory_manager.add(tool_result, MemoryType.TOOL_RESULT, scope="short_term")
-
-                        state["observations"] = str(observation_dict)
-
-                        self.tracelog.log(trace_step)
-                        print(f"  结果: {observation_dict}")
-                    except Exception as e:
+                            print(f"  答案: {result}")
+                            plan.status = PlanStatus.COMPLETED
+                            self.tracelog.dump()
+                            return self._format_trace()
+                        else:
+                            trace_step.action = task.capability
+                            trace_step.observation = result
+                            tool_result = f"调用 {task.capability} 返回: {result}"
+                            self.memory_manager.add(tool_result, MemoryType.TOOL_RESULT, scope="short_term")
+                            state["observations"] = str(result)
+                            self.tracelog.log(trace_step)
+                            print(f"  结果: {result}")
+                    else:
                         task.status = TaskStatus.FAILED
-                        task.error = str(e)
+                        task.error = result
+                        task.retry_count += 1
                         execution_failed = True
-                        print(f"  失败: {e}")
+                        print(f"  失败: {result}")
                         self.tracelog.log(trace_step)
                         break
 
@@ -383,15 +348,6 @@ class ReactAgent:
 
         self.tracelog.dump()
         return self._format_trace()
-
-    def _convert_to_dict(self, observation: Any, task: Task) -> dict:
-        if isinstance(observation, dict):
-            return observation
-
-        if isinstance(observation, str):
-            return {"raw": observation}
-
-        return {"raw": str(observation)}
 
     def _format_trace(self) -> str:
         lines = []

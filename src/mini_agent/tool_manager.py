@@ -6,25 +6,23 @@ from mini_agent.tools.base_tool import BaseTool
 
 class AgentToolManager:
     """Agent工具动态管理器"""
-    
+
     def __init__(self, tools_dir: str = None):
         if tools_dir is None:
-            self.tools_dir = Path(__file__).resolve().parent / "plugins"
+            self.tools_dir = Path(__file__).resolve().parent / "tools"
         else:
             self.tools_dir = Path(tools_dir)
 
         self.tools: Dict[str, BaseTool] = {}
         self._discover_tools()
-    
+
     def _discover_tools(self):
         """自动发现工具"""
-        # 1. 扫描工具目录
         for tool_file in self.tools_dir.glob("*.py"):
             if tool_file.name.startswith("_"):
                 continue
-                
-            # 2. 动态导入
-            module_name = f"runtime.plugins.{tool_file.stem}"
+
+            module_name = f"mini_agent.tools.{tool_file.stem}"
             self._load_tool_module(module_name)
     
     def _load_tool_module(self, module_name: str):

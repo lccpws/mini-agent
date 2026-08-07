@@ -1,4 +1,4 @@
-from mini_agent.planner.models import Task
+from mini_agent.planner.models import Task, TaskStatus
 
 
 class TaskGraph:
@@ -32,24 +32,41 @@ class TaskGraph:
             if task_id in task.dependencies
         ]
 
-    def get_ready_tasks(self):
-        ready = []
+    def update_task_status(self):
         for task in self.tasks.values():
-            if task.status != "PENDING":
-                continue
-            dependencies = self.get_dependencies(task.id)
-            if all(
-                dependency.status == "COMPLETED"
-                for dependency in dependencies
-            ):
-                ready.append(task)
-        return ready
+            if task.status in [TaskStatus.PENDING, TaskStatus.READY]:
+                dependencies = self.get_dependencies(task.id)
+                if all(dep.status == TaskStatus.SUCCESS for dep in dependencies):
+                    task.status = TaskStatus.READY
+
+    def get_ready_tasks(self):
+        self.update_task_status()
+        return [
+            task for task in self.tasks.values()
+            if task.status == TaskStatus.READY
+        ]
 
     def all_completed(self):
-        return all(task.status == "COMPLETED" for task in self.tasks.values())
+        return all(
+            task.status == TaskStatus.SUCCESS
+            for task in self.tasks.values()
+        )
 
     def has_failed(self):
-        return any(task.status == "FAILED" for task in self.tasks.values())
+        return any(
+            task.status == TaskStatus.FAILED
+            for task in self.tasks.values()
+        )
 
     def get_failed_tasks(self):
-        return [task for task in self.tasks.values() if task.status == "FAILED"]
+        return [
+            task for task in self.tasks.values()
+            if task.status == TaskStatus.FAILED
+        ]
+
+    def get_retryable_tasks(self):
+        return [
+            task for task in self.tasks.values()
+            if task.status == TaskStatus.FAILED
+            and task.retry_count < task.max_retry
+        ]

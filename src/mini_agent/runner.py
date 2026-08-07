@@ -1,11 +1,12 @@
 from mini_agent.llm import LLM
 from mini_agent.formatter import ObservationFormatter
+from mini_agent.router import CapabilityRouter
 
 
 class ReActController:
     """ReAct 逻辑控制器，负责单步决策"""
 
-    def __init__(self, llm: LLM, router, executor):
+    def __init__(self, llm: LLM, router: CapabilityRouter, executor):
         self.llm = llm
         self.router = router
         self.executor = executor
