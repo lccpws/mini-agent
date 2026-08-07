@@ -2,23 +2,32 @@
 class PlanValidator:
     def validate(self, plan, capabilities):
 
-        step_ids = {step.id for step in plan.steps}
-        for step in plan.steps:
+        task_ids = {task.id for task in plan.tasks}
+        for task in plan.tasks:
 
-            # 1. Validate dependencies
-            for dep in step.dependencies:
-                if dep not in step_ids:
-                    raise ValueError(f"Invalid dependency '{dep}' in step '{step.id}'")
+            # 1. Validate required fields
+            if not task.description:
+                raise ValueError(f"Task '{task.id}' is missing 'description'")
+            if not task.objective:
+                raise ValueError(f"Task '{task.id}' is missing 'objective'")
+            if not task.expected_output:
+                raise ValueError(f"Task '{task.id}' is missing 'expected_output'")
 
-            # 2. Validate capability
-            if step.capability and step.capability not in capabilities:
-                raise ValueError(f"Invalid capability '{step.capability}' in step '{step.id}'")
+            # 2. Validate dependencies
+            for dep in task.dependencies:
+                if dep not in task_ids:
+                    raise ValueError(f"Invalid dependency '{dep}' in task '{task.id}'")
+
+            # 3. Validate capability
+            if task.capability and task.capability not in capabilities:
+                raise ValueError(f"Invalid capability '{task.capability}' in task '{task.id}'")
 
         return True
 
+
 class DependencyValidator:
-    def validate_no_cycle(self, steps):
-        graph = {step.id: step.dependencies for step in steps}
+    def validate_no_cycle(self, tasks):
+        graph = {task.id: task.dependencies for task in tasks}
         visited = set()
         visiting = set()
 

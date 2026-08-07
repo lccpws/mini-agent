@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 from mini_agent.context import (
     ContextItem,
@@ -14,7 +15,7 @@ from mini_agent.knowledge import KnowledgeBase, KnowledgeRetriever
 from mini_agent.memory.extractor import MemoryExtractor
 from mini_agent.memory.manager import MemoryManager
 from mini_agent.memory.models import MemoryType
-from mini_agent.planner import LLMPlanner, Plan, PlanStep, PlanStatus, StepStatus, get_ready_steps
+from mini_agent.planner import LLMPlanner, Plan, Task, TaskGraph, PlanStatus, TaskStatus, PlanQuality
 from mini_agent.runner import ReActController
 from mini_agent.state import AgentState
 from mini_agent.trace_step import TraceLogger, TraceStep
@@ -229,52 +230,78 @@ class ReactAgent:
             print("=" * 50)
 
             plan = self.planner.create_plan(goal, context)
+
+            if plan is None:
+                print("无法生成有效计划")
+                self.tracelog.dump()
+                return "抱歉，无法生成有效的执行计划，请尝试简化问题。"
+
             plan.status = PlanStatus.RUNNING
+            task_graph = TaskGraph(plan.tasks)
 
             print(f"目标: {plan.goal}")
-            print(f"步骤数: {len(plan.steps)}")
-            for step in plan.steps:
-                deps = ", ".join(step.dependencies) if step.dependencies else "无"
-                print(f"  - [{step.id}] {step.task} (依赖: {deps}, 能力: {step.capability})")
+            print(f"推理: {plan.reasoning}")
+            print(f"任务数: {len(plan.tasks)}")
+            for task in plan.tasks:
+                deps = ", ".join(task.dependencies) if task.dependencies else "无"
+                print(f"  - [{task.id}] {task.description} (依赖: {deps}, 能力: {task.capability})")
+
+            quality_checker = PlanQuality(self.planner.capabilities)
+            breakdown = quality_checker.get_score_breakdown(plan)
+            print(f"\n计划质量评分: {plan.quality_score}/100")
+            if breakdown["task_count_penalty"] > 0:
+                print(f"  - 任务过多: -{breakdown['task_count_penalty']}")
+            if breakdown["unnecessary_dep_penalty"] > 0:
+                print(f"  - 不必要依赖: -{breakdown['unnecessary_dep_penalty']}")
+            if breakdown["unknown_capability_penalty"] > 0:
+                print(f"  - 未知能力: -{breakdown['unknown_capability_penalty']}")
+            if breakdown["cycle_penalty"] > 0:
+                print(f"  - 循环依赖: -{breakdown['cycle_penalty']}")
 
             print("\n" + "=" * 50)
             print("Phase 2: Execution")
             print("=" * 50)
 
-            step_counter = 0
+            task_counter = 0
             execution_failed = False
 
             while True:
-                ready_steps = get_ready_steps(plan)
+                ready_tasks = task_graph.get_ready_tasks()
 
-                if not ready_steps:
-                    all_completed = all(s.status == StepStatus.COMPLETED for s in plan.steps)
-                    if all_completed:
+                if not ready_tasks:
+                    if task_graph.all_completed():
                         plan.status = PlanStatus.COMPLETED
                         print("\n计划执行完成")
                     else:
                         plan.status = PlanStatus.FAILED
-                        print("\n没有可执行的步骤（可能存在循环依赖或步骤失败）")
+                        print("\n没有可执行的任务（可能存在循环依赖或任务失败）")
                     break
 
-                for step in ready_steps:
-                    step_counter += 1
-                    step.status = StepStatus.RUNNING
-                    print(f"\nStep {step_counter}: [{step.id}] {step.task}")
+                for task in ready_tasks:
+                    task_counter += 1
+                    task.status = TaskStatus.RUNNING
+                    print(f"\nTask {task_counter}: [{task.id}] {task.description}")
 
                     trace_step = TraceStep(
                         question=state.question,
-                        step=step_counter,
-                        thought=f"执行计划步骤: {step.task}"
+                        step=task_counter,
+                        thought=f"执行任务: {task.description}"
                     )
 
-                    if step.capability == "answer":
-                        if step.dependencies:
+                    if task.capability == "answer":
+                        if task.dependencies:
                             summary_parts = []
-                            for dep_id in step.dependencies:
-                                dep_step = next((s for s in plan.steps if s.id == dep_id), None)
-                                if dep_step and dep_step.result:
-                                    summary_parts.append(f"{dep_step.task}: {dep_step.result}")
+                            for dep_id in task.dependencies:
+                                dep_task = task_graph.get_task(dep_id)
+                                if dep_task and dep_task.result:
+                                    if dep_task.output_schema:
+                                        fields = dep_task.output_schema.get("properties", {})
+                                        for field_name in fields:
+                                            value = dep_task.get_result_field(field_name)
+                                            if value is not None:
+                                                summary_parts.append(f"{dep_task.description}.{field_name}: {value}")
+                                    else:
+                                        summary_parts.append(f"{dep_task.description}: {dep_task.result}")
                             state["observations"] = "\n".join(summary_parts)
 
                         decision = self.controller.step(state)
@@ -284,8 +311,8 @@ class ReactAgent:
                         self.memory_manager.add(answer, MemoryType.ANSWER, scope="short_term")
 
                         trace_step.answer = answer
-                        step.status = StepStatus.COMPLETED
-                        step.result = answer
+                        task.status = TaskStatus.COMPLETED
+                        task.result = answer
                         self.tracelog.log(trace_step)
                         print(f"  答案: {answer}")
                         plan.status = PlanStatus.COMPLETED
@@ -294,29 +321,41 @@ class ReactAgent:
 
                     decision = {
                         "type": "tool",
-                        "tool": step.capability,
-                        "args": {}
+                        "tool": task.capability,
+                        "args": task.input
                     }
 
-                    trace_step.action = step.capability
+                    trace_step.action = task.capability
                     trace_step.args = decision["args"]
 
                     try:
                         observation = self.controller.execute_tool(decision, role)
                         trace_step.observation = observation
-                        step.status = StepStatus.COMPLETED
-                        step.result = str(observation)
 
-                        tool_result = f"调用 {step.capability} 返回: {observation}"
+                        observation_dict = self._convert_to_dict(observation, task)
+                        task.result = observation_dict
+
+                        is_valid, validation_error = task.validate_result(observation_dict)
+                        if not is_valid:
+                            task.status = TaskStatus.FAILED
+                            task.error = validation_error
+                            execution_failed = True
+                            print(f"  结果验证失败: {validation_error}")
+                            self.tracelog.log(trace_step)
+                            break
+
+                        task.status = TaskStatus.COMPLETED
+
+                        tool_result = f"调用 {task.capability} 返回: {observation_dict}"
                         self.memory_manager.add(tool_result, MemoryType.TOOL_RESULT, scope="short_term")
 
-                        state["observations"] = str(observation)
+                        state["observations"] = str(observation_dict)
 
                         self.tracelog.log(trace_step)
-                        print(f"  结果: {observation}")
+                        print(f"  结果: {observation_dict}")
                     except Exception as e:
-                        step.status = StepStatus.FAILED
-                        step.result = str(e)
+                        task.status = TaskStatus.FAILED
+                        task.error = str(e)
                         execution_failed = True
                         print(f"  失败: {e}")
                         self.tracelog.log(trace_step)
@@ -333,8 +372,9 @@ class ReactAgent:
                 if replan_count <= max_replan_attempts:
                     print(f"\n计划执行失败，准备重新规划 (尝试 {replan_count}/{max_replan_attempts})")
                     plan.status = PlanStatus.NEED_REPLAN
-                    failed_steps = [s for s in plan.steps if s.status == StepStatus.FAILED]
-                    context += f"\n\n上次执行失败的步骤: {', '.join([f'{s.id}: {s.result}' for s in failed_steps])}"
+                    plan.version += 1
+                    failed_tasks = task_graph.get_failed_tasks()
+                    context += f"\n\n上次执行失败的任务: {', '.join([f'{t.id}: {t.error}' for t in failed_tasks])}"
                 else:
                     plan.status = PlanStatus.FAILED
                     print(f"\n已达到最大重试次数 ({max_replan_attempts})，计划执行失败")
@@ -343,6 +383,15 @@ class ReactAgent:
 
         self.tracelog.dump()
         return self._format_trace()
+
+    def _convert_to_dict(self, observation: Any, task: Task) -> dict:
+        if isinstance(observation, dict):
+            return observation
+
+        if isinstance(observation, str):
+            return {"raw": observation}
+
+        return {"raw": str(observation)}
 
     def _format_trace(self) -> str:
         lines = []

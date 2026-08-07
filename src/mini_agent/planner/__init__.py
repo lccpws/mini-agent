@@ -1,6 +1,6 @@
-from .models import Plan, PlanStep, PlanStatus, StepStatus
+from .models import Plan, Task, PlanStatus, TaskStatus, TaskSchemas, PlanQuality
 from .planner import BasePlanner, LLMPlanner
-from .graph import get_ready_steps
+from .graph import TaskGraph
 from .validator import PlanValidator, DependencyValidator
 
 
@@ -8,10 +8,12 @@ __all__ = [
     "BasePlanner",
     "LLMPlanner",
     "Plan",
-    "PlanStep",
+    "Task",
+    "TaskGraph",
+    "TaskSchemas",
+    "PlanQuality",
     "PlanStatus",
-    "StepStatus",
+    "TaskStatus",
     "PlanValidator",
     "DependencyValidator",
-    "get_ready_steps",
 ]
