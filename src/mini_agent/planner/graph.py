@@ -36,6 +36,11 @@ class TaskGraph:
         for task in self.tasks.values():
             if task.status in [TaskStatus.PENDING, TaskStatus.READY]:
                 dependencies = self.get_dependencies(task.id)
+
+                if any(dep.status == TaskStatus.FAILED for dep in dependencies):
+                    task.status = TaskStatus.BLOCKED
+                    continue
+
                 if all(dep.status == TaskStatus.SUCCESS for dep in dependencies):
                     task.status = TaskStatus.READY
 
@@ -70,3 +75,15 @@ class TaskGraph:
             if task.status == TaskStatus.FAILED
             and task.retry_count < task.max_retry
         ]
+
+    def get_blocked_tasks(self):
+        return [
+            task for task in self.tasks.values()
+            if task.status == TaskStatus.BLOCKED
+        ]
+
+    def has_blocked(self):
+        return any(
+            task.status == TaskStatus.BLOCKED
+            for task in self.tasks.values()
+        )

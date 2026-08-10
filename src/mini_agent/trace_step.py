@@ -1,19 +1,130 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
+from datetime import datetime
+
 
 @dataclass
 class TraceStep:
     question: str
-    step: int 
-    thought: str     # LLM 的思考
-    action: str | None = None      # 工具名
-    args: dict | None = None       # 工具参数
-    observation: str | None = None # 执行结果
-    answer: str | None = None      # 最终答案
+    step: int
+    thought: str
+    action: str | None = None
+    args: dict | None = None
+    observation: str | None = None
+    answer: str | None = None
+
+
+@dataclass
+class TaskExecutionRecord:
+    task_id: str
+    task_description: str
+    capability: str | None = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    duration: float = 0.0
+    success: bool = False
+    result: Any = None
+    error: str | None = None
+    failure_type: str | None = None
+    retry_count: int = 0
+    status: str = "PENDING"
+
+    def start(self):
+        self.start_time = datetime.now()
+        self.status = "RUNNING"
+
+    def complete(self, success: bool, result: Any = None, error: str = None, failure_type: str = None):
+        self.end_time = datetime.now()
+        self.success = success
+        self.result = result
+        self.error = error
+        self.failure_type = failure_type
+        self.status = "SUCCESS" if success else "FAILED"
+        if self.start_time:
+            self.duration = (self.end_time - self.start_time).total_seconds()
+
+    def to_dict(self) -> dict:
+        return {
+            "task_id": self.task_id,
+            "task_description": self.task_description,
+            "capability": self.capability,
+            "start_time": self.start_time.isoformat() if self.start_time else None,
+            "end_time": self.end_time.isoformat() if self.end_time else None,
+            "duration": self.duration,
+            "success": self.success,
+            "result": str(self.result)[:500] if self.result else None,
+            "error": self.error,
+            "failure_type": self.failure_type,
+            "retry_count": self.retry_count,
+            "status": self.status,
+        }
+
+
+@dataclass
+class ExecutionTrace:
+    question: str = ""
+    plan_goal: str = ""
+    plan_version: int = 1
+    records: list[TaskExecutionRecord] = field(default_factory=list)
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    total_duration: float = 0.0
+    success_count: int = 0
+    fail_count: int = 0
+
+    def start(self):
+        self.start_time = datetime.now()
+
+    def finish(self):
+        self.end_time = datetime.now()
+        if self.start_time:
+            self.total_duration = (self.end_time - self.start_time).total_seconds()
+        self.success_count = sum(1 for r in self.records if r.success)
+        self.fail_count = sum(1 for r in self.records if not r.success)
+
+    def add_record(self, record: TaskExecutionRecord):
+        self.records.append(record)
+
+    def get_record(self, task_id: str) -> TaskExecutionRecord | None:
+        for record in self.records:
+            if record.task_id == task_id:
+                return record
+        return None
+
+    def get_summary(self) -> dict:
+        return {
+            "question": self.question,
+            "plan_goal": self.plan_goal,
+            "plan_version": self.plan_version,
+            "total_tasks": len(self.records),
+            "success_count": self.success_count,
+            "fail_count": self.fail_count,
+            "total_duration": self.total_duration,
+            "records": [r.to_dict() for r in self.records],
+        }
+
+    def print_summary(self):
+        print("=" * 60)
+        print("Execution Trace Summary")
+        print("=" * 60)
+        print(f"Question: {self.question}")
+        print(f"Plan Goal: {self.plan_goal}")
+        print(f"Total Duration: {self.total_duration:.2f}s")
+        print(f"Tasks: {self.success_count} success, {self.fail_count} failed")
+        print()
+        for record in self.records:
+            status = "✓" if record.success else "✗"
+            print(f"  {status} [{record.task_id}] {record.task_description}")
+            print(f"    Duration: {record.duration:.2f}s, Retries: {record.retry_count}")
+            if record.error:
+                print(f"    Error: {record.error}")
+        print("=" * 60)
+
 
 class TraceLogger:
     def __init__(self):
         self.logs = []
-    
+
     def log(self, step: TraceStep):
         self.logs.append(step)
 
@@ -21,4 +132,3 @@ class TraceLogger:
         for tracestep in self.logs:
             print(f"Step {tracestep.step}:")
             print(tracestep)
-        

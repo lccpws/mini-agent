@@ -17,8 +17,15 @@ class TaskStatus:
     RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
+    BLOCKED = "BLOCKED"
     RETRYING = "RETRYING"
     CANCELLED = "CANCELLED"
+
+
+class FailureType:
+    TRANSIENT = "TRANSIENT"
+    PERMANENT = "PERMANENT"
+    UNKNOWN = "UNKNOWN"
 
 
 class TaskSchemas:

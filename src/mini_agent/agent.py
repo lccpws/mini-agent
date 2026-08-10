@@ -16,7 +16,7 @@ from mini_agent.knowledge import KnowledgeBase, KnowledgeRetriever
 from mini_agent.memory.extractor import MemoryExtractor
 from mini_agent.memory.manager import MemoryManager
 from mini_agent.memory.models import MemoryType
-from mini_agent.planner import LLMPlanner, Plan, Task, TaskGraph, PlanStatus, TaskStatus, PlanQuality
+from mini_agent.planner import LLMPlanner, Plan, Task, TaskGraph, PlanStatus, TaskStatus, PlanQuality, FailureType
 from mini_agent.runner import ReActController
 from mini_agent.state import AgentState
 from mini_agent.trace_step import TraceLogger, TraceStep
@@ -283,9 +283,10 @@ class ReactAgent:
                         print("\n没有可执行的任务（可能存在循环依赖或任务失败）")
                     break
 
-                for task in ready_tasks:
+                results = task_engine.execute_tasks_parallel(ready_tasks, state, role)
+
+                for task, success, result, failure_type in results:
                     task_counter += 1
-                    task.status = TaskStatus.RUNNING
                     print(f"\nTask {task_counter}: [{task.id}] {task.description}")
 
                     trace_step = TraceStep(
@@ -293,8 +294,6 @@ class ReactAgent:
                         step=task_counter,
                         thought=f"执行任务: {task.description}"
                     )
-
-                    success, result = task_engine.execute_task(task, state, role)
 
                     if success:
                         task.status = TaskStatus.SUCCESS
@@ -320,11 +319,12 @@ class ReactAgent:
                     else:
                         task.status = TaskStatus.FAILED
                         task.error = result
-                        task.retry_count += 1
                         execution_failed = True
-                        print(f"  失败: {result}")
+                        print(f"  失败: {result} (类型: {failure_type})")
                         self.tracelog.log(trace_step)
-                        break
+
+                        if failure_type == FailureType.PERMANENT:
+                            print(f"  永久失败，需要重新规划")
 
                 if execution_failed:
                     break
