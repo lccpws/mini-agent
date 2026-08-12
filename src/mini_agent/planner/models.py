@@ -115,6 +115,9 @@ class TaskSchemas:
         cls._schemas[name] = schema
 
 
+SIMPLE_CAPABILITIES = {"weather", "calculator"}
+
+
 @dataclass
 class Task:
     id: str
@@ -130,6 +133,12 @@ class Task:
     error: str | None = None
     retry_count: int = 0
     max_retry: int = 3
+    enable_reflection: bool | None = None
+
+    def should_reflect(self) -> bool:
+        if self.enable_reflection is not None:
+            return self.enable_reflection
+        return self.capability not in SIMPLE_CAPABILITIES
 
     def _resolve_schema(self) -> dict[str, Any] | None:
         if self.output_schema is None:

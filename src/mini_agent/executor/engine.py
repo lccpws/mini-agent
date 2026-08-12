@@ -6,16 +6,19 @@ from mini_agent.router import CapabilityRouter
 from mini_agent.executor.failure import FailureClassifier
 from mini_agent.executor.retry import RetryManager
 from mini_agent.trace_step import TaskExecutionRecord, ExecutionTrace
+from mini_agent.reflection.engine import ReflectionEngine
+from mini_agent.reflection.models import EvaluationResult, ReflectionResult
 
 
 class TaskEngine:
-    def __init__(self, controller=None, tracelog=None, memory_manager=None, max_workers: int = 4):
+    def __init__(self, controller=None, tracelog=None, memory_manager=None, llm=None, max_workers: int = 4):
         self.controller = controller
         self.tracelog = tracelog
         self.memory_manager = memory_manager
         self.tool_manager = AgentToolManager()
         self.router = CapabilityRouter(self.tool_manager)
         self.retry_manager = RetryManager()
+        self.reflection_engine = ReflectionEngine(llm=llm)
         self.max_workers = max_workers
         self.execution_trace = ExecutionTrace()
 
@@ -59,27 +62,71 @@ class TaskEngine:
             )
             self.execution_trace.add_record(record)
 
-        record.start()
-        record.retry_count = task.retry_count
+        context = ""
+        if state:
+            context = str(state.get("observations", ""))
 
-        def execute():
-            if task.capability == "answer":
-                return self._execute_answer(task, state)
-            else:
-                return self._execute_tool(task)
+        for attempt in range(task.max_retry):
+            record.start()
+            record.retry_count = task.retry_count
 
-        success, result, failure_type = self.retry_manager.execute_with_retry(execute, task)
+            try:
+                if task.capability == "answer":
+                    result = self._execute_answer(task, state)
+                else:
+                    result = self._execute_tool(task)
 
-        if success:
-            is_valid, error = task.validate_result(result)
-            if not is_valid:
-                record.complete(False, error, error, FailureType.PERMANENT)
-                return False, error, FailureType.PERMANENT
+                is_valid, error = task.validate_result(result)
+                if not is_valid:
+                    task.retry_count += 1
+                    evaluation = EvaluationResult(score=0, passed=False, reason=error)
+                    reflection_result = ReflectionResult(
+                        reflected=True,
+                        feedback=error,
+                        should_retry=task.retry_count < task.max_retry
+                    )
 
-        record.complete(success, result if success else None, result if not success else None, failure_type)
-        record.retry_count = task.retry_count
+                    if reflection_result.should_retry:
+                        task.status = TaskStatus.RETRYING
+                        continue
 
-        return success, result, failure_type
+                    record.complete(False, error, error, FailureType.PERMANENT)
+                    return False, error, FailureType.PERMANENT
+
+                evaluation, reflection_result = self.reflection_engine.evaluate_and_reflect(
+                    task, result, context
+                )
+
+                if evaluation.passed:
+                    record.complete(True, result)
+                    return True, result, None
+
+                if self.reflection_engine.should_retry(task, evaluation, reflection_result):
+                    task = self.reflection_engine.apply_reflection(task, reflection_result)
+                    task.retry_count += 1
+                    task.status = TaskStatus.RETRYING
+                    continue
+
+                record.complete(False, str(result), evaluation.reason, FailureType.PERMANENT)
+                return False, evaluation.reason, FailureType.PERMANENT
+
+            except Exception as e:
+                failure_type = FailureClassifier.classify(e)
+                task.retry_count += 1
+
+                if failure_type == FailureType.PERMANENT:
+                    record.complete(False, None, str(e), failure_type)
+                    return False, str(e), failure_type
+
+                if task.retry_count < task.max_retry:
+                    task.status = TaskStatus.RETRYING
+                    continue
+
+                record.complete(False, None, str(e), failure_type)
+                return False, str(e), failure_type
+
+        record.complete(False, "Max retries exceeded", "Max retries exceeded", FailureType.TRANSIENT)
+        return False, "Max retries exceeded", FailureType.TRANSIENT
 
     def execute_tasks_parallel(
         self,

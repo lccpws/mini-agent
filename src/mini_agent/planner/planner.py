@@ -58,6 +58,9 @@ class LLMPlanner(BasePlanner):
             10. 不要创建不存在的 capability
             11. 不要执行任务，只负责规划
             12. 最终任务必须能够覆盖用户目标
+            13. 简单查询任务（如天气查询）设置 enable_reflection: false
+            14. 复杂分析任务（如研究报告、综合分析）设置 enable_reflection: true
+            15. 不设置 enable_reflection 时系统会自动判断
 
             输出必须严格符合 JSON Schema：
             {{
@@ -72,7 +75,8 @@ class LLMPlanner(BasePlanner):
                         "dependencies": [],
                         "input": {{}},
                         "expected_output": "预期输出",
-                        "output_schema": "search"
+                        "output_schema": "search",
+                        "enable_reflection": true
                     }}
                 ]
             }}
