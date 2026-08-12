@@ -100,11 +100,15 @@ class TaskEngine:
                     task, result, context
                 )
 
+                print(f"  评估: score={evaluation.score:.1f}, passed={evaluation.passed}, reason={evaluation.reason}")
+
                 if evaluation.passed:
                     record.complete(True, result)
                     return True, result, None
 
                 if self.reflection_engine.should_retry(task, evaluation, reflection_result):
+                    print(f"  反思: reflected={reflection_result.reflected}, should_retry={reflection_result.should_retry}")
+                    print(f"  反思反馈: {reflection_result.feedback[:100]}...")
                     task = self.reflection_engine.apply_reflection(task, reflection_result)
                     task.retry_count += 1
                     task.status = TaskStatus.RETRYING
