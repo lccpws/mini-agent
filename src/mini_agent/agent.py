@@ -208,6 +208,7 @@ class ReactAgent:
             self.tracelog.log(trace_step)
 
         self.tracelog.dump()
+        self.tracelog.save()
         return self._format_trace()
 
     def _run_plan_react(self, state: AgentState, role: str) -> str:
@@ -236,6 +237,7 @@ class ReactAgent:
             if plan is None:
                 print("无法生成有效计划")
                 self.tracelog.dump()
+                self.tracelog.save()
                 return "抱歉，无法生成有效的执行计划，请尝试简化问题。"
 
             plan.status = PlanStatus.RUNNING
@@ -266,11 +268,12 @@ class ReactAgent:
 
             task_counter = 0
             execution_failed = False
-            task_engine = TaskEngine(
+            self._task_engine = TaskEngine(
                 controller=self.controller,
                 tracelog=self.tracelog,
                 memory_manager=self.memory_manager
             )
+            task_engine = self._task_engine
 
             while True:
                 ready_tasks = task_graph.get_ready_tasks()
@@ -308,6 +311,8 @@ class ReactAgent:
                             print(f"  答案: {result}")
                             plan.status = PlanStatus.COMPLETED
                             self.tracelog.dump()
+                            self.tracelog.save()
+                            self._task_engine.execution_trace.save()
                             return self._format_trace()
                         else:
                             trace_step.action = task.capability
@@ -353,6 +358,9 @@ class ReactAgent:
                 break
 
         self.tracelog.dump()
+        self.tracelog.save()
+        if hasattr(self, '_task_engine') and self._task_engine:
+            self._task_engine.execution_trace.save()
         return self._format_trace()
 
     def _format_trace(self) -> str:

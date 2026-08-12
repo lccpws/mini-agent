@@ -1,4 +1,6 @@
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 from datetime import datetime
 
@@ -12,6 +14,17 @@ class TraceStep:
     args: dict | None = None
     observation: str | None = None
     answer: str | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "question": self.question,
+            "step": self.step,
+            "thought": self.thought,
+            "action": self.action,
+            "args": self.args,
+            "observation": str(self.observation)[:500] if self.observation else None,
+            "answer": self.answer,
+        }
 
 
 @dataclass
@@ -71,6 +84,7 @@ class ExecutionTrace:
     total_duration: float = 0.0
     success_count: int = 0
     fail_count: int = 0
+    persist_dir: str = "traces"
 
     def start(self):
         self.start_time = datetime.now()
@@ -120,10 +134,29 @@ class ExecutionTrace:
                 print(f"    Error: {record.error}")
         print("=" * 60)
 
+    def save(self, filename: str = None):
+        self.finish()
+        persist_dir = Path(self.persist_dir)
+        persist_dir.mkdir(parents=True, exist_ok=True)
+
+        if filename is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"trace_{timestamp}.json"
+
+        filepath = persist_dir / filename
+        data = self.get_summary()
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        print(f"执行记录已保存: {filepath}")
+        return filepath
+
 
 class TraceLogger:
-    def __init__(self):
-        self.logs = []
+    def __init__(self, persist_dir: str = "traces"):
+        self.logs: list[TraceStep] = []
+        self.persist_dir = persist_dir
 
     def log(self, step: TraceStep):
         self.logs.append(step)
@@ -132,3 +165,23 @@ class TraceLogger:
         for tracestep in self.logs:
             print(f"Step {tracestep.step}:")
             print(tracestep)
+
+    def save(self, filename: str = None):
+        persist_dir = Path(self.persist_dir)
+        persist_dir.mkdir(parents=True, exist_ok=True)
+
+        if filename is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"react_trace_{timestamp}.json"
+
+        filepath = persist_dir / filename
+        data = {
+            "total_steps": len(self.logs),
+            "logs": [step.to_dict() for step in self.logs],
+        }
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        print(f"ReAct 记录已保存: {filepath}")
+        return filepath
