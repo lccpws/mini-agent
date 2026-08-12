@@ -197,6 +197,41 @@ class TestReflectionMemory:
         self.memory.clear()
         assert len(self.memory.records) == 0
 
+    def test_get_replan_context_empty(self):
+        ctx = self.memory.get_replan_context(["weather"])
+        assert ctx == ""
+
+    def test_get_replan_context_with_records(self):
+        r1 = ReflectionRecord(
+            id="", capability="weather", failure_type="TRANSIENT",
+            error_message="timeout", root_cause="network slow",
+            alternative_capability="weather_api", alternative_input={"city": "Beijing"}
+        )
+        r1.success_count = 3
+        r2 = ReflectionRecord(
+            id="", capability="weather", failure_type="PERMANENT",
+            error_message="not found", root_cause="invalid city"
+        )
+        r2.fail_count = 2
+        self.memory.save(r1)
+        self.memory.save(r2)
+        ctx = self.memory.get_replan_context(["weather"])
+        assert "weather" in ctx
+        assert "历史经验" in ctx
+        assert "成功方案" in ctx
+        assert "失败原因" in ctx
+
+    def test_get_replan_context_multiple_caps(self):
+        r1 = ReflectionRecord(
+            id="", capability="search", failure_type="UNKNOWN",
+            error_message="err", root_cause="cause"
+        )
+        r1.fail_count = 1
+        self.memory.save(r1)
+        ctx = self.memory.get_replan_context(["search", "weather"])
+        assert "search" in ctx
+        assert "weather" not in ctx
+
 
 class TestReflectionEngine:
     def setup_method(self):

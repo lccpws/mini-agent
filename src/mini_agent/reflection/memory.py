@@ -97,6 +97,25 @@ class ReflectionMemory:
             "total_fail": sum(r.fail_count for r in self.records),
         }
 
+    def get_replan_context(self, capabilities: list[str]) -> str:
+        parts = []
+        for cap in capabilities:
+            records = self.search_by_capability(cap)
+            if not records:
+                continue
+            successful = [r for r in records if r.success_count > 0]
+            failed = [r for r in records if r.fail_count > 0]
+            if not successful and not failed:
+                continue
+            parts.append(f"\n能力 '{cap}' 的历史经验:")
+            for r in successful:
+                parts.append(f"  - 成功方案: 替代能力={r.alternative_capability}, 建议输入={r.alternative_input} (成功{r.success_count}次)")
+            for r in failed[:2]:
+                parts.append(f"  - 失败原因: {r.root_cause} (失败{r.fail_count}次)")
+                if r.alternative_capability:
+                    parts.append(f"    建议替代: {r.alternative_capability}")
+        return "\n".join(parts) if parts else ""
+
     def clear(self):
         self.records = []
         self._persist()

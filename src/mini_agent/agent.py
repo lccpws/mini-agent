@@ -17,6 +17,7 @@ from mini_agent.memory.extractor import MemoryExtractor
 from mini_agent.memory.manager import MemoryManager
 from mini_agent.memory.models import MemoryType
 from mini_agent.planner import LLMPlanner, Plan, Task, TaskGraph, PlanStatus, TaskStatus, PlanQuality, FailureType
+from mini_agent.reflection.memory import ReflectionMemory
 from mini_agent.runner import ReActController
 from mini_agent.state import AgentState
 from mini_agent.trace_step import TraceLogger, TraceStep
@@ -340,6 +341,11 @@ class ReactAgent:
                     plan.version += 1
                     failed_tasks = task_graph.get_failed_tasks()
                     context += f"\n\n上次执行失败的任务: {', '.join([f'{t.id}: {t.error}' for t in failed_tasks])}"
+
+                    failed_caps = [t.capability for t in failed_tasks if t.capability]
+                    exp_context = task_engine.reflection_engine.memory.get_replan_context(failed_caps)
+                    if exp_context:
+                        context += f"\n\n历史反思经验:{exp_context}"
                 else:
                     plan.status = PlanStatus.FAILED
                     print(f"\n已达到最大重试次数 ({max_replan_attempts})，计划执行失败")
