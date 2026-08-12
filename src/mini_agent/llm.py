@@ -64,13 +64,23 @@ class LLM:
         return self._parse_response(output)
     
     def generate(self, prompt: str):
+        messages = [{"role": "user", "content": prompt}] if isinstance(prompt, str) else prompt
         response = self.client.chat.completions.create(
             model=self.model,
-            messages=prompt,
+            messages=messages,
             response_format={"type": "json_object"}
         )
         output = response.choices[0].message.content
         return self._parse_response(output)
+
+    def generate_raw(self, prompt: str):
+        messages = [{"role": "user", "content": prompt}] if isinstance(prompt, str) else prompt
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            response_format={"type": "json_object"}
+        )
+        return response.choices[0].message.content
 
     def _build_message(self, state):
         if hasattr(state, 'context_items') and state.context_items:

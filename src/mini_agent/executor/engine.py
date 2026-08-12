@@ -64,7 +64,10 @@ class TaskEngine:
 
         context = ""
         if state:
-            context = str(state.get("observations", ""))
+            observations = getattr(state, "observations", None)
+            if observations is None:
+                observations = state.get("observations", "") if hasattr(state, "get") else ""
+            context = str(observations) if observations else ""
 
         for attempt in range(task.max_retry):
             record.start()
