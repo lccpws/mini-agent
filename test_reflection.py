@@ -313,18 +313,6 @@ class TestReflectionEngine:
         refl_r = ReflectionResult(reflected=True, should_retry=True, action=Action.REPLAN)
         assert self.engine.should_replan(task, eval_r, refl_r, question="test question") is False
 
-    def test_replan_convergence_stops(self):
-        task = Task(id="t1", description="test", objective="test", max_retry=3, retry_count=1)
-        eval_r = EvaluationResult(score=30.0, passed=False, reason="low")
-        refl_r = ReflectionResult(reflected=True, should_retry=True, action=Action.REPLAN)
-        q = "test question"
-
-        self.engine.replan_history[q] = [30.0, 31.0]
-        assert self.engine.should_replan(task, eval_r, refl_r, question=q) is False
-
-        self.engine.replan_history[q] = [30.0, 35.0]
-        assert self.engine.should_replan(task, eval_r, refl_r, question=q) is True
-
     def test_apply_reflection_updates_input(self):
         task = Task(id="t1", description="test", objective="test", input={"old": "value"})
         refl_r = ReflectionResult(improved_input={"new": "value"})

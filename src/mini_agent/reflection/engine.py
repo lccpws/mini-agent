@@ -21,7 +21,6 @@ class ReflectionEngine:
         self.corrector = Corrector()
         self.min_improvement = min_improvement
         self.score_history: dict[str, list[float]] = {}
-        self.replan_history: dict[str, list[float]] = {}
 
     def evaluate_and_reflect(
         self,
@@ -111,20 +110,7 @@ class ReflectionEngine:
         if task.retry_count == 0:
             return False
 
-        key = question or task.id
-        replan_scores = self.replan_history.get(key, [])
-        if len(replan_scores) >= 2:
-            improvement = replan_scores[-1] - replan_scores[-2]
-            if improvement < self.min_improvement:
-                return False
-
         return True
-
-    def record_replan_score(self, score: float, question: str = "", task_id: str = ""):
-        key = question or task_id
-        if key not in self.replan_history:
-            self.replan_history[key] = []
-        self.replan_history[key].append(score)
 
     def apply_reflection(
         self,

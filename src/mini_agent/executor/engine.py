@@ -118,7 +118,6 @@ class TaskEngine:
 
                 if self.reflection_engine.should_replan(task, evaluation, reflection_result, question):
                     print(f"  反思: LLM 建议重新规划 (action={reflection_result.action})")
-                    self.reflection_engine.record_replan_score(evaluation.score, question=question)
                     record.complete(False, str(result), evaluation.reason, FailureType.NEED_REPLAN)
                     return False, evaluation.reason, FailureType.NEED_REPLAN
 
