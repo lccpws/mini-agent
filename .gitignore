@@ -40,6 +40,9 @@ logs/
 # Memory data
 memory_data/
 
+# Traces
+traces/
+
 # Test artifacts
 test_consolidate_final/
 test_consolidate2/
