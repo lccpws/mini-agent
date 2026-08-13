@@ -27,7 +27,8 @@ class ReflectionEngine:
         self,
         task: Task,
         result: Any,
-        context: str = ""
+        context: str = "",
+        question: str = ""
     ) -> tuple[EvaluationResult, ReflectionResult]:
         evaluation = self.evaluator.evaluate(task, result, context)
 
@@ -101,7 +102,8 @@ class ReflectionEngine:
         self,
         task: Task,
         evaluation: EvaluationResult,
-        reflection_result: ReflectionResult
+        reflection_result: ReflectionResult,
+        question: str = ""
     ) -> bool:
         if reflection_result.action != Action.REPLAN:
             return False
@@ -109,7 +111,8 @@ class ReflectionEngine:
         if task.retry_count == 0:
             return False
 
-        replan_scores = self.replan_history.get(task.id, [])
+        key = question or task.id
+        replan_scores = self.replan_history.get(key, [])
         if len(replan_scores) >= 2:
             improvement = replan_scores[-1] - replan_scores[-2]
             if improvement < self.min_improvement:
@@ -117,10 +120,11 @@ class ReflectionEngine:
 
         return True
 
-    def record_replan_score(self, task_id: str, score: float):
-        if task_id not in self.replan_history:
-            self.replan_history[task_id] = []
-        self.replan_history[task_id].append(score)
+    def record_replan_score(self, score: float, question: str = "", task_id: str = ""):
+        key = question or task_id
+        if key not in self.replan_history:
+            self.replan_history[key] = []
+        self.replan_history[key].append(score)
 
     def apply_reflection(
         self,
