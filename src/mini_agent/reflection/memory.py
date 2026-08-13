@@ -31,16 +31,23 @@ class ReflectionMemory:
 
         if self.vector_index and self.vector_index.count() == 0 and self.records:
             for record in self.records:
-                text = self._record_to_text(record)
-                self.vector_index.add(record.id, text)
+                self._index_record(record)
             self.vector_index.save()
 
-    def _persist(self):
-        try:
-            with open(self.persist_file, "w", encoding="utf-8") as f:
-                json.dump([r.to_dict() for r in self.records], f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"保存反思记忆失败: {e}")
+    def _index_record(self, record: ReflectionRecord):
+        """将记录添加到向量索引"""
+        if self.vector_index is None:
+            return
+
+        text = self._record_to_text(record)
+        metadata = {
+            "capability": record.capability,
+            "error_message": record.error_message,
+            "root_cause": record.root_cause,
+            "success_count": record.success_count,
+            "fail_count": record.fail_count,
+        }
+        self.vector_index.add(record.id, text, metadata)
 
     def _record_to_text(self, record: ReflectionRecord) -> str:
         parts = [
@@ -54,21 +61,34 @@ class ReflectionMemory:
             parts.append(f"建议输入: {json.dumps(record.alternative_input, ensure_ascii=False)}")
         return " ".join(parts)
 
+    def _persist(self):
+        try:
+            with open(self.persist_file, "w", encoding="utf-8") as f:
+                json.dump([r.to_dict() for r in self.records], f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"保存反思记忆失败: {e}")
+
     def save(self, record: ReflectionRecord):
         existing = self.find_by_capability_and_error(record.capability, record.error_message)
         if existing:
             existing.fail_count += 1
             existing.last_used = datetime.now()
-            if self.vector_index:
+            if self.vector_index and self.vector_index.contains(existing.id):
+                metadata = {
+                    "capability": existing.capability,
+                    "error_message": existing.error_message,
+                    "root_cause": existing.root_cause,
+                    "success_count": existing.success_count,
+                    "fail_count": existing.fail_count,
+                }
+                self.vector_index.records[self.vector_index.id_to_idx[existing.id]].metadata = metadata
                 self.vector_index.save()
         else:
             if not record.id:
                 record.id = str(uuid.uuid4())
             self.records.append(record)
-
+            self._index_record(record)
             if self.vector_index:
-                text = self._record_to_text(record)
-                self.vector_index.add(record.id, text)
                 self.vector_index.save()
 
         self._persist()
@@ -94,7 +114,7 @@ class ReflectionMemory:
 
         results = self.vector_index.search(query, top_k)
         records_with_score = []
-        for record_id, score in results:
+        for record_id, score, metadata in results:
             record = next((r for r in self.records if r.id == record_id), None)
             if record:
                 records_with_score.append((record, score))
@@ -175,4 +195,8 @@ class ReflectionMemory:
         self.records = []
         self._persist()
         if self.vector_index:
+            if self.vector_index.index_path.exists():
+                self.vector_index.index_path.unlink()
+            if self.vector_index.records_path.exists():
+                self.vector_index.records_path.unlink()
             self.vector_index = None
