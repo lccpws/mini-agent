@@ -26,6 +26,7 @@ class FailureType:
     TRANSIENT = "TRANSIENT"
     PERMANENT = "PERMANENT"
     UNKNOWN = "UNKNOWN"
+    NEED_REPLAN = "NEED_REPLAN"
 
 
 class TaskSchemas:

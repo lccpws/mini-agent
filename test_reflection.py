@@ -2,7 +2,7 @@ import tempfile
 import shutil
 from pathlib import Path
 from mini_agent.planner.models import Task, TaskStatus
-from mini_agent.reflection.models import EvaluationResult, ReflectionResult, ReflectionRecord
+from mini_agent.reflection.models import EvaluationResult, ReflectionResult, ReflectionRecord, Action
 from mini_agent.reflection.evaluator import Evaluator
 from mini_agent.reflection.reflection import Reflection
 from mini_agent.reflection.memory import ReflectionMemory
@@ -263,7 +263,7 @@ class TestReflectionEngine:
     def test_convergence_stops_retry(self):
         task = Task(id="t1", description="test", objective="test", max_retry=3)
         eval_r = EvaluationResult(score=58.0, passed=False, reason="low")
-        refl_r = ReflectionResult(reflected=True, should_retry=True)
+        refl_r = ReflectionResult(reflected=True, should_retry=True, action=Action.RETRY)
 
         self.engine.score_history["t1"] = [55.0, 58.0]
         task.retry_count = 1
@@ -278,14 +278,14 @@ class TestReflectionEngine:
         task = Task(id="t1", description="test", objective="test", max_retry=3)
         self.engine.score_history["t1"] = [55.0]
         eval_r = EvaluationResult(score=55.0, passed=False, reason="low")
-        refl_r = ReflectionResult(reflected=True, should_retry=True)
+        refl_r = ReflectionResult(reflected=True, should_retry=True, action=Action.RETRY)
         task.retry_count = 0
         assert self.engine.should_retry(task, eval_r, refl_r) is True
 
     def test_max_retry_stops(self):
         task = Task(id="t1", description="test", objective="test", max_retry=3, retry_count=3)
         eval_r = EvaluationResult(score=55.0, passed=False, reason="low")
-        refl_r = ReflectionResult(reflected=True, should_retry=True)
+        refl_r = ReflectionResult(reflected=True, should_retry=True, action=Action.RETRY)
         assert self.engine.should_retry(task, eval_r, refl_r) is False
 
     def test_passed_stops(self):
@@ -297,8 +297,15 @@ class TestReflectionEngine:
     def test_no_reflection_stops(self):
         task = Task(id="t1", description="test", objective="test", max_retry=3)
         eval_r = EvaluationResult(score=50.0, passed=False, reason="low")
-        refl_r = ReflectionResult(reflected=False, should_retry=False)
+        refl_r = ReflectionResult(reflected=False, should_retry=False, action=Action.NONE)
         assert self.engine.should_retry(task, eval_r, refl_r) is False
+
+    def test_replan_action_stops_retry(self):
+        task = Task(id="t1", description="test", objective="test", max_retry=3)
+        eval_r = EvaluationResult(score=30.0, passed=False, reason="low")
+        refl_r = ReflectionResult(reflected=True, should_retry=True, action=Action.REPLAN)
+        assert self.engine.should_retry(task, eval_r, refl_r) is False
+        assert self.engine.should_replan(refl_r) is True
 
     def test_apply_reflection_updates_input(self):
         task = Task(id="t1", description="test", objective="test", input={"old": "value"})

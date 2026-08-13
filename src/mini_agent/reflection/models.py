@@ -1,5 +1,13 @@
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
+
+
+class Action(str, Enum):
+    RETRY = "retry"
+    REGENERATE = "regenerate"
+    REPLAN = "replan"
+    NONE = "none"
 
 
 @dataclass
@@ -18,6 +26,7 @@ class ReflectionResult:
     feedback: str = ""
     improved_input: dict = field(default_factory=dict)
     should_retry: bool = False
+    action: str = Action.NONE
     root_cause: str = ""
     suggested_capability: str | None = None
 

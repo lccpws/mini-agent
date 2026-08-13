@@ -1,6 +1,6 @@
 from typing import Any
 from mini_agent.planner.models import Task
-from mini_agent.reflection.models import EvaluationResult, ReflectionResult, ReflectionRecord
+from mini_agent.reflection.models import EvaluationResult, ReflectionResult, ReflectionRecord, Action
 from mini_agent.reflection.evaluator import Evaluator
 from mini_agent.reflection.reflection import Reflection
 from mini_agent.reflection.memory import ReflectionMemory
@@ -77,19 +77,27 @@ class ReflectionEngine:
         if evaluation.passed:
             return False
 
-        if not (reflection_result.reflected and reflection_result.should_retry):
+        action = reflection_result.action
+
+        if action == Action.REPLAN or action == Action.NONE:
             return False
 
-        if task.retry_count >= task.max_retry:
-            return False
-
-        scores = self.score_history.get(task.id, [])
-        if len(scores) >= 2:
-            improvement = scores[-1] - scores[-2]
-            if improvement < self.min_improvement:
+        if action in (Action.RETRY, Action.REGENERATE):
+            if not (reflection_result.reflected and reflection_result.should_retry):
                 return False
+            if task.retry_count >= task.max_retry:
+                return False
+            scores = self.score_history.get(task.id, [])
+            if len(scores) >= 2:
+                improvement = scores[-1] - scores[-2]
+                if improvement < self.min_improvement:
+                    return False
+            return True
 
-        return True
+        return False
+
+    def should_replan(self, reflection_result: ReflectionResult) -> bool:
+        return reflection_result.action == Action.REPLAN
 
     def apply_reflection(
         self,

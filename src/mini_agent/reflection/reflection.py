@@ -1,6 +1,6 @@
 from typing import Any
 from mini_agent.planner.models import Task
-from mini_agent.reflection.models import EvaluationResult, ReflectionResult
+from mini_agent.reflection.models import EvaluationResult, ReflectionResult, Action
 
 
 class Reflection:
@@ -36,11 +36,14 @@ class Reflection:
             and task.retry_count < task.max_retry
         )
 
+        action = Action.RETRY if should_retry else Action.NONE
+
         return ReflectionResult(
             reflected=len(feedback_parts) > 0,
             feedback="\n".join(feedback_parts),
             improved_input=improved_input,
             should_retry=should_retry,
+            action=action,
             root_cause=evaluation.reason
         )
 
@@ -67,20 +70,32 @@ class Reflection:
     "reflected": true,
     "feedback": "详细的反思反馈",
     "improved_input": {{}},
-    "should_retry": true/false,
+    "action": "retry | regenerate | replan | none",
     "root_cause": "根本原因分析",
     "suggested_capability": "建议使用的能力（如果需要更换）"
-}}"""
+}}
+
+action 说明：
+- retry: 任务可以重试，需要修改输入参数后再执行
+- regenerate: 任务可以重试，无需修改输入，重新执行即可
+- replan: 任务无法通过重试解决，需要重新规划整个计划
+- none: 不重试，直接失败"""
 
         try:
             import json
             response = self.llm.generate(prompt)
             data = json.loads(response)
+
+            action = data.get("action", Action.NONE)
+            if action not in [a.value for a in Action]:
+                action = Action.RETRY if data.get("should_retry", False) else Action.NONE
+
             return ReflectionResult(
                 reflected=data.get("reflected", True),
                 feedback=data.get("feedback", ""),
                 improved_input=data.get("improved_input", task.input),
-                should_retry=data.get("should_retry", False),
+                should_retry=action in (Action.RETRY, Action.REGENERATE),
+                action=action,
                 root_cause=data.get("root_cause", ""),
                 suggested_capability=data.get("suggested_capability")
             )
