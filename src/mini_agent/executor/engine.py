@@ -107,12 +107,18 @@ class TaskEngine:
                     return True, result, None
 
                 if self.reflection_engine.should_retry(task, evaluation, reflection_result):
-                    print(f"  反思: reflected={reflection_result.reflected}, should_retry={reflection_result.should_retry}")
+                    print(f"  反思: action={reflection_result.action}, reflected={reflection_result.reflected}")
                     print(f"  反思反馈: {reflection_result.feedback[:100]}...")
                     task = self.reflection_engine.apply_reflection(task, reflection_result)
                     task.retry_count += 1
                     task.status = TaskStatus.RETRYING
                     continue
+
+                if self.reflection_engine.should_replan(task, evaluation, reflection_result):
+                    print(f"  反思: LLM 建议重新规划 (action={reflection_result.action})")
+                    self.reflection_engine.record_replan_score(task.id, evaluation.score)
+                    record.complete(False, str(result), evaluation.reason, FailureType.NEED_REPLAN)
+                    return False, evaluation.reason, FailureType.NEED_REPLAN
 
                 record.complete(False, str(result), evaluation.reason, FailureType.PERMANENT)
                 return False, evaluation.reason, FailureType.PERMANENT
