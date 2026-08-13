@@ -7,11 +7,17 @@ from mini_agent.planner.models import Task
 
 
 class ReflectionMemory:
-    def __init__(self, persist_dir: str = "memory_data"):
+    def __init__(self, persist_dir: str = "memory_data", embedder=None):
         self.records: list[ReflectionRecord] = []
         self.persist_dir = Path(persist_dir)
         self.persist_dir.mkdir(parents=True, exist_ok=True)
         self.persist_file = self.persist_dir / "reflection_memory.json"
+
+        self.vector_index = None
+        if embedder is not None:
+            from mini_agent.reflection.vector_index import ReflectionVectorIndex
+            self.vector_index = ReflectionVectorIndex(embedder, persist_dir)
+
         self._load()
 
     def _load(self):
@@ -23,6 +29,12 @@ class ReflectionMemory:
             except Exception:
                 self.records = []
 
+        if self.vector_index and self.vector_index.count() == 0 and self.records:
+            for record in self.records:
+                text = self._record_to_text(record)
+                self.vector_index.add(record.id, text)
+            self.vector_index.save()
+
     def _persist(self):
         try:
             with open(self.persist_file, "w", encoding="utf-8") as f:
@@ -30,15 +42,35 @@ class ReflectionMemory:
         except Exception as e:
             print(f"保存反思记忆失败: {e}")
 
+    def _record_to_text(self, record: ReflectionRecord) -> str:
+        parts = [
+            f"能力: {record.capability}",
+            f"错误: {record.error_message}",
+            f"原因: {record.root_cause}",
+        ]
+        if record.alternative_capability:
+            parts.append(f"替代能力: {record.alternative_capability}")
+        if record.alternative_input:
+            parts.append(f"建议输入: {json.dumps(record.alternative_input, ensure_ascii=False)}")
+        return " ".join(parts)
+
     def save(self, record: ReflectionRecord):
         existing = self.find_by_capability_and_error(record.capability, record.error_message)
         if existing:
             existing.fail_count += 1
             existing.last_used = datetime.now()
+            if self.vector_index:
+                self.vector_index.save()
         else:
             if not record.id:
                 record.id = str(uuid.uuid4())
             self.records.append(record)
+
+            if self.vector_index:
+                text = self._record_to_text(record)
+                self.vector_index.add(record.id, text)
+                self.vector_index.save()
+
         self._persist()
 
     def find_by_capability_and_error(self, capability: str, error_message: str) -> ReflectionRecord | None:
@@ -54,6 +86,19 @@ class ReflectionMemory:
                 if not error_message or self._is_similar_error(error_message, record.error_message):
                     results.append(record)
         return sorted(results, key=lambda r: (r.success_count, -r.fail_count), reverse=True)
+
+    def search_semantic(self, query: str, top_k: int = 5) -> list[tuple[ReflectionRecord, float]]:
+        """语义检索，返回 (record, similarity_score)"""
+        if not self.vector_index:
+            return [(r, 0.0) for r in self.records[:top_k]]
+
+        results = self.vector_index.search(query, top_k)
+        records_with_score = []
+        for record_id, score in results:
+            record = next((r for r in self.records if r.id == record_id), None)
+            if record:
+                records_with_score.append((record, score))
+        return records_with_score
 
     def search_by_capability(self, capability: str) -> list[ReflectionRecord]:
         return [r for r in self.records if r.capability == capability]
@@ -74,6 +119,14 @@ class ReflectionMemory:
         return sorted(records, key=lambda r: r.success_count, reverse=True)[:limit]
 
     def _is_similar_error(self, error1: str, error2: str) -> bool:
+        if self.vector_index:
+            results = self.vector_index.search(error1, top_k=1)
+            if results and results[0][1] > 0.8:
+                return True
+
+        return self._keyword_similar(error1, error2)
+
+    def _keyword_similar(self, error1: str, error2: str) -> bool:
         error1_lower = error1.lower()
         error2_lower = error2.lower()
 
@@ -95,6 +148,8 @@ class ReflectionMemory:
             "capabilities": list(set(r.capability for r in self.records)),
             "total_success": sum(r.success_count for r in self.records),
             "total_fail": sum(r.fail_count for r in self.records),
+            "vector_index_enabled": self.vector_index is not None,
+            "vector_index_count": self.vector_index.count() if self.vector_index else 0,
         }
 
     def get_replan_context(self, capabilities: list[str]) -> str:
@@ -119,3 +174,5 @@ class ReflectionMemory:
     def clear(self):
         self.records = []
         self._persist()
+        if self.vector_index:
+            self.vector_index = None

@@ -3,6 +3,7 @@ from .evaluator import Evaluator
 from .reflection import Reflection
 from .corrector import Corrector
 from .memory import ReflectionMemory
+from .vector_index import ReflectionVectorIndex
 from .engine import ReflectionEngine
 
 __all__ = [
@@ -14,5 +15,6 @@ __all__ = [
     "Reflection",
     "Corrector",
     "ReflectionMemory",
+    "ReflectionVectorIndex",
     "ReflectionEngine",
 ]
