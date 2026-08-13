@@ -4,6 +4,7 @@ from mini_agent.reflection.models import EvaluationResult, ReflectionResult, Ref
 from mini_agent.reflection.evaluator import Evaluator
 from mini_agent.reflection.reflection import Reflection
 from mini_agent.reflection.memory import ReflectionMemory
+from mini_agent.reflection.corrector import Corrector
 
 
 class ReflectionEngine:
@@ -17,6 +18,7 @@ class ReflectionEngine:
         self.evaluator = Evaluator(llm=llm, threshold=threshold)
         self.reflection = Reflection(llm=llm)
         self.memory = ReflectionMemory(persist_dir=persist_dir)
+        self.corrector = Corrector()
         self.min_improvement = min_improvement
         self.score_history: dict[str, list[float]] = {}
 
@@ -94,10 +96,4 @@ class ReflectionEngine:
         task: Task,
         reflection_result: ReflectionResult
     ) -> Task:
-        if reflection_result.improved_input:
-            task.input = reflection_result.improved_input
-
-        if reflection_result.suggested_capability:
-            task.capability = reflection_result.suggested_capability
-
-        return task
+        return self.corrector.correct(task, reflection_result)
