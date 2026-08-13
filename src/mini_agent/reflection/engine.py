@@ -51,6 +51,7 @@ class ReflectionEngine:
                     suggestions=evaluation.suggestions,
                     alternative_capability=reflection_result.suggested_capability,
                     alternative_input=reflection_result.improved_input,
+                    score=evaluation.score,
                 )
                 self.memory.save(record)
 

@@ -73,16 +73,23 @@ class ReflectionMemory:
         if existing:
             existing.fail_count += 1
             existing.last_used = datetime.now()
-            if self.vector_index and self.vector_index.contains(existing.id):
-                metadata = {
-                    "capability": existing.capability,
-                    "error_message": existing.error_message,
-                    "root_cause": existing.root_cause,
-                    "success_count": existing.success_count,
-                    "fail_count": existing.fail_count,
-                }
-                self.vector_index.records[self.vector_index.id_to_idx[existing.id]].metadata = metadata
-                self.vector_index.save()
+
+            if record.score > existing.score:
+                existing.root_cause = record.root_cause
+                existing.alternative_capability = record.alternative_capability
+                existing.alternative_input = record.alternative_input
+                existing.suggestions = record.suggestions
+                existing.score = record.score
+
+                if self.vector_index and self.vector_index.contains(existing.id):
+                    self.vector_index.remove(existing.id)
+                    self._index_record(existing)
+                    self.vector_index.save()
+            else:
+                if self.vector_index and self.vector_index.contains(existing.id):
+                    idx = self.vector_index.id_to_idx[existing.id]
+                    self.vector_index.records[idx].metadata["fail_count"] = existing.fail_count
+                    self.vector_index.save()
         else:
             if not record.id:
                 record.id = str(uuid.uuid4())

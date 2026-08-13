@@ -43,6 +43,7 @@ class ReflectionRecord:
     alternative_input: dict = field(default_factory=dict)
     success_count: int = 0
     fail_count: int = 0
+    score: float = 0.0
     created_at: datetime = field(default_factory=datetime.now)
     last_used: datetime | None = None
 
@@ -58,6 +59,7 @@ class ReflectionRecord:
             "alternative_input": self.alternative_input,
             "success_count": self.success_count,
             "fail_count": self.fail_count,
+            "score": self.score,
             "created_at": self.created_at.isoformat(),
             "last_used": self.last_used.isoformat() if self.last_used else None,
         }
@@ -75,6 +77,7 @@ class ReflectionRecord:
             alternative_input=data.get("alternative_input", {}),
             success_count=data.get("success_count", 0),
             fail_count=data.get("fail_count", 0),
+            score=data.get("score", 0.0),
             created_at=datetime.fromisoformat(data["created_at"]) if data.get("created_at") else datetime.now(),
             last_used=datetime.fromisoformat(data["last_used"]) if data.get("last_used") else None,
         )
