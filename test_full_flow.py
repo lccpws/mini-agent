@@ -8,22 +8,26 @@ from mini_agent.router import CapabilityRouter
 from mini_agent.tool_manager import AgentToolManager
 from mini_agent.agent import ReactAgent
 from mini_agent.planner import LLMPlanner
+from mini_agent.memory.embedder import Embedder
 
 
 def main():
     print("[1] 初始化 LLM...")
     llm = LLM(model="gpt-4o")
 
-    print("[2] 初始化工具管理器...")
+    print("[2] 初始化 Embedder...")
+    embedder = Embedder()
+
+    print("[3] 初始化工具管理器...")
     tool_manager = AgentToolManager()
     print(f"    已发现工具: {list(tool_manager.tools.keys())}")
 
-    print("[3] 初始化路由器...")
+    print("[4] 初始化路由器...")
     router = CapabilityRouter(tool_manager)
 
-    print("[4] 初始化 TaskEngine...")
+    print("[5] 初始化 TaskEngine...")
     from mini_agent.executor import TaskEngine
-    task_engine = TaskEngine(llm=llm)
+    task_engine = TaskEngine(llm=llm, embedder=embedder)
 
     print("[5] 初始化 Controller...")
     controller = ReActController(llm=llm, router=router, executor=task_engine)
@@ -43,6 +47,7 @@ def main():
         planner=planner,
         max_steps=10,
         debug_context=False,
+        embedder=embedder,
     )
 
     question = "我想十一黄金周期间去乌鲁木齐旅游，根据以往的天气情况看十一期间乌鲁木齐的天气如何？帮我制定一个十一黄金周五天乌鲁木齐及周边旅游攻略"

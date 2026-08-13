@@ -14,10 +14,11 @@ class ReflectionEngine:
         threshold: float = 60.0,
         persist_dir: str = "memory_data",
         min_improvement: float = 3.0,
+        embedder=None,
     ):
         self.evaluator = Evaluator(llm=llm, threshold=threshold)
         self.reflection = Reflection(llm=llm)
-        self.memory = ReflectionMemory(persist_dir=persist_dir)
+        self.memory = ReflectionMemory(persist_dir=persist_dir, embedder=embedder)
         self.corrector = Corrector()
         self.min_improvement = min_improvement
         self.score_history: dict[str, list[float]] = {}

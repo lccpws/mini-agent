@@ -26,10 +26,11 @@ from mini_agent.trace_step import TraceLogger, TraceStep
 class ReactAgent:
     """ReAct Agent，支持纯 ReAct 和 Plan + ReAct 两种模式"""
 
-    def __init__(self, controller: ReActController, planner: LLMPlanner = None, max_steps: int = 5, debug_context: bool = False, knowledge_base: KnowledgeBase = None, policy: ContextPolicy = None):
+    def __init__(self, controller: ReActController, planner: LLMPlanner = None, max_steps: int = 5, debug_context: bool = False, knowledge_base: KnowledgeBase = None, policy: ContextPolicy = None, embedder=None):
         self.controller = controller
         self.planner = planner
         self.max_steps = max_steps
+        self.embedder = embedder
         self.tracelog = TraceLogger()
         self.memory_manager = MemoryManager(persist_dir="memory_data")
         self.memory_extractor = MemoryExtractor(controller.llm)
@@ -271,7 +272,8 @@ class ReactAgent:
             self._task_engine = TaskEngine(
                 controller=self.controller,
                 tracelog=self.tracelog,
-                memory_manager=self.memory_manager
+                memory_manager=self.memory_manager,
+                embedder=self.embedder
             )
             task_engine = self._task_engine
 

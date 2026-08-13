@@ -11,14 +11,14 @@ from mini_agent.reflection.models import EvaluationResult, ReflectionResult
 
 
 class TaskEngine:
-    def __init__(self, controller=None, tracelog=None, memory_manager=None, llm=None, max_workers: int = 4):
+    def __init__(self, controller=None, tracelog=None, memory_manager=None, llm=None, embedder=None, max_workers: int = 4):
         self.controller = controller
         self.tracelog = tracelog
         self.memory_manager = memory_manager
         self.tool_manager = AgentToolManager()
         self.router = CapabilityRouter(self.tool_manager)
         self.retry_manager = RetryManager()
-        self.reflection_engine = ReflectionEngine(llm=llm)
+        self.reflection_engine = ReflectionEngine(llm=llm, embedder=embedder)
         self.max_workers = max_workers
         self.execution_trace = ExecutionTrace()
 
