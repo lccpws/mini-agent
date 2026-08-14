@@ -1,4 +1,3 @@
-from mini_agent.context.models import ContextSource
 from mini_agent.context.policy import ContextPolicy
 
 
@@ -34,33 +33,37 @@ class DynamicTokenBudget:
         self.input_budget = total_tokens - output_tokens
         self.policy = policy or ContextPolicy()
         self.source_budgets = self._calculate_budgets()
-        self.source_used = {s: 0 for s in ContextSource}
+        self.source_used: dict[str, int] = {}
 
-    def _calculate_budgets(self) -> dict[ContextSource, int]:
+    def _calculate_budgets(self) -> dict[str, int]:
         budgets = {}
-        for source in ContextSource:
+        for source in self.policy.rules.keys():
             ratio = self.policy.get_budget_ratio(source)
             budgets[source] = int(self.input_budget * ratio)
         return budgets
 
-    def can_fit(self, source: ContextSource, tokens: int) -> bool:
-        return self.source_used[source] + tokens <= self.source_budgets[source]
+    def can_fit(self, source: str, tokens: int) -> bool:
+        used = self.source_used.get(source, 0)
+        budget = self.source_budgets.get(source, 0)
+        return used + tokens <= budget
 
-    def consume(self, source: ContextSource, tokens: int) -> bool:
+    def consume(self, source: str, tokens: int) -> bool:
         if not self.can_fit(source, tokens):
             return False
-        self.source_used[source] += tokens
+        self.source_used[source] = self.source_used.get(source, 0) + tokens
         return True
 
-    def get_remaining(self, source: ContextSource) -> int:
-        return self.source_budgets[source] - self.source_used[source]
+    def get_remaining(self, source: str) -> int:
+        used = self.source_used.get(source, 0)
+        budget = self.source_budgets.get(source, 0)
+        return budget - used
 
     def get_usage(self) -> dict:
         return {
-            source.value: {
-                "budget": self.source_budgets[source],
-                "used": self.source_used[source],
+            source: {
+                "budget": self.source_budgets.get(source, 0),
+                "used": self.source_used.get(source, 0),
                 "remaining": self.get_remaining(source),
             }
-            for source in ContextSource
+            for source in self.policy.rules.keys()
         }
