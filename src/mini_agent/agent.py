@@ -165,6 +165,7 @@ class ReactAgent:
         state.context_items = self.context_manager.build_context(
             state.context_items,
             route=route,
+            query=state.question,
             total_tokens=8000,
             output_tokens=2000
         )
@@ -222,6 +223,7 @@ class ReactAgent:
         state.context_items = self.context_manager.build_context(
             state.context_items,
             route=route,
+            query=state.question,
             total_tokens=8000,
             output_tokens=2000
         )

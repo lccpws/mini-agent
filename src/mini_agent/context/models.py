@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
@@ -25,6 +26,7 @@ class ContextItem:
     token_count: int = 0
     compressible: bool = True
     compressed: bool = False
+    created_at: datetime = field(default_factory=datetime.now)
 
 
 @dataclass

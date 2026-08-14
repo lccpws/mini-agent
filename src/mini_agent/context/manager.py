@@ -2,6 +2,7 @@ from mini_agent.context.budget import DynamicTokenBudget, TokenBudget
 from mini_agent.context.compressor import ContextCompressor
 from mini_agent.context.models import ContextItem, ContextRoute
 from mini_agent.context.policy import ContextPolicy
+from mini_agent.context.score import ContextScorer
 from mini_agent.context.selector import ContextSelector
 
 
@@ -13,6 +14,7 @@ class ContextManager:
         selector: ContextSelector = None,
         compressor: ContextCompressor = None,
         policy: ContextPolicy = None,
+        scorer: ContextScorer = None,
         total_tokens: int = 8000,
         output_tokens: int = 2000,
         use_dynamic_budget: bool = True
@@ -20,6 +22,7 @@ class ContextManager:
         self.selector = selector or ContextSelector()
         self.compressor = compressor or ContextCompressor()
         self.policy = policy or ContextPolicy()
+        self.scorer = scorer or ContextScorer()
         self.total_tokens = total_tokens
         self.output_tokens = output_tokens
         self.use_dynamic_budget = use_dynamic_budget
@@ -28,6 +31,7 @@ class ContextManager:
         self,
         items: list[ContextItem],
         route: ContextRoute = None,
+        query: str = "",
         total_tokens: int = None,
         output_tokens: int = None
     ) -> list[ContextItem]:
@@ -43,15 +47,13 @@ class ContextManager:
         
         filtered_items = self._apply_policy(filtered_items)
         
-        selected = self.selector.select(filtered_items, budget)
+        selected = self.selector.select(filtered_items, budget, query)
         
         target_per_item = budget.input_budget // max(len(selected), 1)
         for item in selected:
             item = self.compressor.compress(item, target_per_item)
         
-        from mini_agent.context.score import ContextScorer
-        scorer = ContextScorer()
-        selected = sorted(selected, key=lambda item: scorer.score(item), reverse=True)
+        selected = sorted(selected, key=lambda item: self.scorer.score(item, query), reverse=True)
         
         return selected
 
