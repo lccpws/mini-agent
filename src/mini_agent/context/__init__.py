@@ -11,6 +11,7 @@ from mini_agent.context.manager import ContextManager
 from mini_agent.context.models import ContextItem, ContextRoute, ContextSource
 from mini_agent.context.policy import ContextPolicy
 from mini_agent.context.router import ContextRouter
+from mini_agent.context.score import ContextScorer
 from mini_agent.context.selector import ContextSelector
 from mini_agent.context.token_counter import (
     TokenCounter,
@@ -29,6 +30,7 @@ __all__ = [
     "ContextPolicy",
     "ContextRoute",
     "ContextRouter",
+    "ContextScorer",
     "ContextSelector",
     "ContextSource",
     "DynamicTokenBudget",

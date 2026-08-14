@@ -113,16 +113,18 @@ class ReactAgent:
 
         system_prompt = self.controller.llm.system_prompt
         items.append(ContextItem(
+            id="system_prompt",
             content=system_prompt,
-            source=ContextSource.SYSTEM,
-            priority=100,
+            source="system",
+            priority=1.0,
             token_count=self.controller.llm.estimate_tokens(system_prompt)
         ))
 
         items.append(ContextItem(
+            id="user_question",
             content=f"问题：{state.question}",
-            source=ContextSource.USER,
-            priority=90,
+            source="user",
+            priority=0.9,
             token_count=self.controller.llm.estimate_tokens(state.question)
         ))
 
@@ -130,9 +132,10 @@ class ReactAgent:
             for i, memory in enumerate(state.memories):
                 content = f"记忆：{memory.content}"
                 items.append(ContextItem(
+                    id=f"memory_{i}",
                     content=content,
-                    source=ContextSource.MEMORY,
-                    priority=50 - i,
+                    source="memory",
+                    priority=0.5 - i * 0.01,
                     token_count=self.controller.llm.estimate_tokens(content)
                 ))
 
@@ -144,9 +147,10 @@ class ReactAgent:
             for i, obs in enumerate(state.observations):
                 content = f"观察：{obs}"
                 items.append(ContextItem(
+                    id=f"history_{i}",
                     content=content,
-                    source=ContextSource.HISTORY,
-                    priority=30 - i,
+                    source="history",
+                    priority=0.3 - i * 0.01,
                     token_count=self.controller.llm.estimate_tokens(content)
                 ))
 

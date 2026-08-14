@@ -1,6 +1,6 @@
 from mini_agent.knowledge.base import KnowledgeBase
 from mini_agent.knowledge.models import DocumentChunk
-from mini_agent.context.models import ContextItem, ContextSource
+from mini_agent.context.models import ContextItem
 from mini_agent.context.token_counter import TokenCounter, TokenCounterFactory
 
 
@@ -22,13 +22,9 @@ class KnowledgeRetriever:
         content = f"[知识库:{filename}] {chunk.content}"
         
         return ContextItem(
+            id=f"rag_{chunk.id}",
             content=content,
-            source=ContextSource.RAG,
-            priority=40,
+            source="rag",
+            priority=0.4,
             token_count=self.token_counter.count_tokens(content),
-            metadata={
-                "document_id": chunk.document_id,
-                "chunk_id": chunk.id,
-                "chunk_index": chunk.chunk_index
-            }
         )

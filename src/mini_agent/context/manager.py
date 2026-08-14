@@ -1,6 +1,6 @@
 from mini_agent.context.budget import DynamicTokenBudget, TokenBudget
 from mini_agent.context.compressor import ContextCompressor
-from mini_agent.context.models import ContextItem, ContextRoute, ContextSource
+from mini_agent.context.models import ContextItem, ContextRoute
 from mini_agent.context.policy import ContextPolicy
 from mini_agent.context.selector import ContextSelector
 
@@ -49,7 +49,9 @@ class ContextManager:
         for item in selected:
             item = self.compressor.compress(item, target_per_item)
         
-        selected = sorted(selected, key=lambda item: item.priority, reverse=True)
+        from mini_agent.context.score import ContextScorer
+        scorer = ContextScorer()
+        selected = sorted(selected, key=lambda item: scorer.score(item), reverse=True)
         
         return selected
 
@@ -59,15 +61,15 @@ class ContextManager:
         
         filtered = []
         for item in items:
-            if item.source == ContextSource.SYSTEM and not route.needs_system:
+            if item.source == "system" and not route.needs_system:
                 continue
-            if item.source == ContextSource.USER and not route.needs_user:
+            if item.source == "user" and not route.needs_user:
                 continue
-            if item.source == ContextSource.MEMORY and not route.needs_memory:
+            if item.source == "memory" and not route.needs_memory:
                 continue
-            if item.source == ContextSource.RAG and not route.needs_rag:
+            if item.source == "rag" and not route.needs_rag:
                 continue
-            if item.source == ContextSource.HISTORY and not route.needs_history:
+            if item.source == "history" and not route.needs_history:
                 continue
             filtered.append(item)
         

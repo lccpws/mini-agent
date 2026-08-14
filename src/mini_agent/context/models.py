@@ -5,23 +5,27 @@ from typing import Any
 
 class ContextSource(Enum):
     """上下文来源"""
-    SYSTEM = "system"    # 系统
-    MEMORY = "memory"    # 记忆
-    HISTORY = "history"  # 历史记录
-    TOOL = "tool"        # 执行工具
-    RAG = "rag"          # RAG
-    USER = "user"        # 用户信息
+    SYSTEM = "system"
+    MEMORY = "memory"
+    HISTORY = "history"
+    TOOL = "tool"
+    RAG = "rag"
+    USER = "user"
+
 
 @dataclass
 class ContextItem:
-
+    id: str = ""
     content: str = ""
-    source: ContextSource = ContextSource.SYSTEM
-    priority: int = 0
-    score: float = 1.0
+    source: str = "system"
+    priority: float = 0.5
+    relevance: float = 0.5
+    recency: float = 0.5
+    reliability: float = 0.5
     token_count: int = 0
+    compressible: bool = True
+    compressed: bool = False
 
-    metadata: dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class ContextRoute:

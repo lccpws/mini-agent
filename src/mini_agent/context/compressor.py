@@ -60,10 +60,14 @@ class ContextCompressor:
         self.strategy = strategy or TruncateStrategy()
 
     def compress(self, item: ContextItem, target_tokens: int) -> ContextItem:
+        if not item.compressible or item.compressed:
+            return item
+
         current_tokens = item.token_count
         if current_tokens <= target_tokens:
             return item
 
         item.content = self.strategy.compress(item.content, target_tokens)
         item.token_count = target_tokens
+        item.compressed = True
         return item

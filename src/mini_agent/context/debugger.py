@@ -1,4 +1,4 @@
-from mini_agent.context.models import ContextItem, ContextSource
+from mini_agent.context.models import ContextItem
 
 
 class ContextDebugger:
@@ -13,12 +13,10 @@ class ContextDebugger:
 
         grouped = self._group_by_source(context_items)
 
-        for source in [ContextSource.SYSTEM, ContextSource.USER, 
-                       ContextSource.MEMORY, ContextSource.HISTORY, 
-                       ContextSource.TOOL, ContextSource.RAG]:
+        for source in ["system", "user", "memory", "history", "tool", "rag"]:
             items = grouped.get(source, [])
             if items:
-                print(f"\n{source.value.upper()}:")
+                print(f"\n{source.upper()}:")
                 for item in items:
                     content = item.content[:200] + "..." if len(item.content) > 200 else item.content
                     print(f"  {content}")
