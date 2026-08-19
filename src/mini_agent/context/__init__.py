@@ -5,11 +5,13 @@ from mini_agent.context.compressor import (
     CompressionStrategy,
     TruncateStrategy,
     LLMSummaryStrategy,
+    PriorityCompressor,
 )
 from mini_agent.context.debugger import ContextDebugger
 from mini_agent.context.manager import ContextManager
 from mini_agent.context.models import ContextItem, ContextRoute, ContextSource
 from mini_agent.context.policy import ContextPolicy
+from mini_agent.context.resolver import ContextResolver
 from mini_agent.context.router import ContextRouter
 from mini_agent.context.score import ContextScorer
 from mini_agent.context.selector import ContextSelector
@@ -28,6 +30,7 @@ __all__ = [
     "ContextItem",
     "ContextManager",
     "ContextPolicy",
+    "ContextResolver",
     "ContextRoute",
     "ContextRouter",
     "ContextScorer",
@@ -36,6 +39,7 @@ __all__ = [
     "DynamicTokenBudget",
     "EstimationCounter",
     "LLMSummaryStrategy",
+    "PriorityCompressor",
     "TokenBudget",
     "TokenCounter",
     "TokenCounterFactory",

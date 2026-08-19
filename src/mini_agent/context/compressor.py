@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 from mini_agent.context.models import ContextItem
+from mini_agent.context.policy import ContextPolicy
 
 
 class CompressionStrategy(ABC):
@@ -71,3 +72,67 @@ class ContextCompressor:
         item.token_count = target_tokens
         item.compressed = True
         return item
+
+
+class PriorityCompressor:
+    """按优先级压缩，低优先级先压缩"""
+
+    COMPRESSION_FACTORS = {
+        "system": 0.0,
+        "user": 0.0,
+        "tool": 0.2,
+        "memory": 0.3,
+        "rag": 0.4,
+        "history": 0.6,
+    }
+
+    def __init__(
+        self,
+        strategy: CompressionStrategy = None,
+        policy: ContextPolicy = None,
+        compression_factors: dict[str, float] = None,
+    ):
+        self.strategy = strategy or TruncateStrategy()
+        self.policy = policy or ContextPolicy()
+        self.compression_factors = compression_factors or self.COMPRESSION_FACTORS
+
+    def compress(self, item: ContextItem) -> ContextItem:
+        """根据优先级压缩单个 item"""
+        if not item.compressible or item.compressed:
+            return item
+
+        source = item.source.value if hasattr(item.source, 'value') else item.source
+        compression_factor = self.compression_factors.get(source, 0.3)
+
+        if compression_factor == 0.0:
+            return item
+
+        target_tokens = max(1, int(item.token_count * (1.0 - compression_factor)))
+
+        if item.token_count <= target_tokens:
+            return item
+
+        item.content = self.strategy.compress(item.content, target_tokens)
+        item.token_count = target_tokens
+        item.compressed = True
+        return item
+
+    def compress_all(self, items: list[ContextItem]) -> list[ContextItem]:
+        """按优先级排序后压缩所有 items（低优先级先压缩）"""
+        sorted_items = sorted(
+            items,
+            key=lambda x: self._get_priority(x),
+            reverse=False
+        )
+
+        result = []
+        for item in sorted_items:
+            compressed = self.compress(item)
+            result.append(compressed)
+
+        return result
+
+    def _get_priority(self, item: ContextItem) -> float:
+        """获取 item 的优先级数值（用于排序）"""
+        source = item.source.value if hasattr(item.source, 'value') else item.source
+        return self.policy.get_priority(source)

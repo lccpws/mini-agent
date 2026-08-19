@@ -1,12 +1,14 @@
 from mini_agent.context.budget import DynamicTokenBudget, TokenBudget
 from mini_agent.context.models import ContextItem
+from mini_agent.context.policy import ContextPolicy
 from mini_agent.context.score import ContextScorer
 
 
 class ContextSelector:
 
-    def __init__(self):
-        self.scorer = ContextScorer()
+    def __init__(self, policy: ContextPolicy = None):
+        self.policy = policy or ContextPolicy()
+        self.scorer = ContextScorer(policy=self.policy)
 
     def select(self, items: list[ContextItem], budget: TokenBudget | DynamicTokenBudget, query: str = ""):
         if isinstance(budget, DynamicTokenBudget):
@@ -14,7 +16,7 @@ class ContextSelector:
         return self._select_by_priority(items, budget, query)
 
     def _select_by_priority(self, items: list[ContextItem], budget: TokenBudget, query: str = ""):
-        items = sorted(items, key=lambda item: self.scorer.score(item, query), reverse=True)
+        items = sorted(items, key=lambda item: self.scorer.utility(item, query), reverse=True)
 
         selected = []
         for item in items:
@@ -28,9 +30,10 @@ class ContextSelector:
         
         selected = []
         for source, source_items in grouped.items():
-            source_items.sort(key=lambda x: self.scorer.score(x, query), reverse=True)
+            source_items.sort(key=lambda x: self.scorer.utility(x, query), reverse=True)
             for item in source_items:
-                if budget.consume(source, item.token_count):
+                source_str = source.value if hasattr(source, 'value') else source
+                if budget.consume(source_str, item.token_count):
                     selected.append(item)
 
         return selected
